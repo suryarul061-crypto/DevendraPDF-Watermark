@@ -62,7 +62,7 @@ def make_overlay(width, height, logo_width, margin):
         draw_height = max_height
         draw_width = draw_height * image_width / image_height
     x = max(0.0, width - draw_width - float(margin))
-    y = max(0.0, float(margin))
+ y = max(0.0, height - draw_height - float(margin)))
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=(width, height), pageCompression=1)
     c.drawImage(image, x, y, width=draw_width, height=draw_height, preserveAspectRatio=True, mask="auto", anchor="c")
