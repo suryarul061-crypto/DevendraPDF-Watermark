@@ -15,24 +15,34 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout current repository
+      - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          path: source
+          clean: true
+          fetch-depth: 1
 
       - name: Locate project files
         shell: pwsh
         run: |
+          $root = Join-Path $env:GITHUB_WORKSPACE "source"
+
           $candidates = @(
-            ".",
-            "devendra_pdf_watermark"
+            $root,
+            (Join-Path $root "devendra_pdf_watermark")
           )
 
           $project = $null
 
           foreach ($folder in $candidates) {
+            $main = Join-Path $folder "main.py"
+            $requirements = Join-Path $folder "requirements.txt"
+            $logo = Join-Path $folder "Logo.png"
+
             if (
-              (Test-Path (Join-Path $folder "main.py")) -and
-              (Test-Path (Join-Path $folder "requirements.txt")) -and
-              (Test-Path (Join-Path $folder "Logo.png"))
+              (Test-Path $main) -and
+              (Test-Path $requirements) -and
+              (Test-Path $logo)
             ) {
               $project = $folder
               break
@@ -40,16 +50,17 @@ jobs:
           }
 
           if (!$project) {
-            Write-Host "Repository files:"
-            Get-ChildItem -Force
-            throw "Cannot find main.py, requirements.txt and Logo.png together."
+            Write-Host "Repository root:"
+            Get-ChildItem $root -Force
+
+            throw "Required files not found together: main.py, requirements.txt, Logo.png"
           }
 
           "PROJECT_DIR=$project" |
             Out-File -FilePath $env:GITHUB_ENV -Append
 
           Write-Host "Project directory: $project"
-          Get-ChildItem $project
+          Get-ChildItem $project -Force
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -71,13 +82,14 @@ jobs:
             --clean `
             --onefile `
             --name DevendraPDF `
+            --add-data "$env:PROJECT_DIR/Logo.png;." `
             "$env:PROJECT_DIR/main.py"
 
           if (!(Test-Path "dist/DevendraPDF.exe")) {
-            throw "DevendraPDF.exe was not created."
+            throw "Build failed: DevendraPDF.exe was not created."
           }
 
-      - name: Copy company logo
+      - name: Copy logo beside executable
         shell: pwsh
         run: |
           Copy-Item "$env:PROJECT_DIR/Logo.png" "dist/Logo.png"
