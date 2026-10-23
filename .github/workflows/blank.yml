@@ -19,48 +19,56 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: source
-          clean: true
-          fetch-depth: 1
 
-      - name: Locate project files
+      - name: Find project files
         shell: pwsh
         run: |
           $root = Join-Path $env:GITHUB_WORKSPACE "source"
 
-          $candidates = @(
-            $root,
-            (Join-Path $root "devendra_pdf_watermark")
-          )
+          $mainFiles = Get-ChildItem `
+            -Path $root `
+            -Filter "main.py" `
+            -File `
+            -Recurse |
+            Where-Object {
+              $_.FullName -notmatch '[\\/](\.git|\.venv|venv)[\\/]'
+            }
 
           $project = $null
 
-          foreach ($folder in $candidates) {
-            $main = Join-Path $folder "main.py"
-            $requirements = Join-Path $folder "requirements.txt"
-            $logo = Join-Path $folder "Logo.png"
+          foreach ($file in $mainFiles) {
+            $folder = $file.Directory.FullName
 
-            if (
-              (Test-Path $main) -and
-              (Test-Path $requirements) -and
-              (Test-Path $logo)
-            ) {
+            $requirements = Get-ChildItem `
+              -Path $folder `
+              -File |
+              Where-Object { $_.Name -ieq "requirements.txt" } |
+              Select-Object -First 1
+
+            $logo = Get-ChildItem `
+              -Path $folder `
+              -File |
+              Where-Object { $_.Name -ieq "Logo.png" } |
+              Select-Object -First 1
+
+            if ($requirements -and $logo) {
               $project = $folder
               break
             }
           }
 
           if (!$project) {
-            Write-Host "Repository root:"
-            Get-ChildItem $root -Force
+            Write-Host "Files found in repository:"
+            Get-ChildItem $root -Recurse -File |
+              Select-Object -ExpandProperty FullName
 
-            throw "Required files not found together: main.py, requirements.txt, Logo.png"
+            throw "Could not find main.py, requirements.txt and Logo.png in one folder."
           }
 
           "PROJECT_DIR=$project" |
             Out-File -FilePath $env:GITHUB_ENV -Append
 
-          Write-Host "Project directory: $project"
-          Get-ChildItem $project -Force
+          Write-Host "Project folder found: $project"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -86,15 +94,15 @@ jobs:
             "$env:PROJECT_DIR/main.py"
 
           if (!(Test-Path "dist/DevendraPDF.exe")) {
-            throw "Build failed: DevendraPDF.exe was not created."
+            throw "DevendraPDF.exe was not created."
           }
 
-      - name: Copy logo beside executable
+      - name: Copy company logo
         shell: pwsh
         run: |
           Copy-Item "$env:PROJECT_DIR/Logo.png" "dist/Logo.png"
 
-      - name: Upload Windows application
+      - name: Upload application
         uses: actions/upload-artifact@v4
         with:
           name: DevendraPDF-Windows-x64
