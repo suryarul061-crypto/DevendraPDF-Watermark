@@ -15,33 +15,40 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout source
+      - name: Checkout current repository
         uses: actions/checkout@v4
 
-      - name: Find project files
+      - name: Locate project files
         shell: pwsh
         run: |
-          if (Test-Path "main.py") {
-            $project = "."
-          }
-          elseif (Test-Path "devendra_pdf_watermark/main.py") {
-            $project = "devendra_pdf_watermark"
-          }
-          else {
-            throw "main.py not found. Check the repository folder structure."
+          $candidates = @(
+            ".",
+            "devendra_pdf_watermark"
+          )
+
+          $project = $null
+
+          foreach ($folder in $candidates) {
+            if (
+              (Test-Path (Join-Path $folder "main.py")) -and
+              (Test-Path (Join-Path $folder "requirements.txt")) -and
+              (Test-Path (Join-Path $folder "Logo.png"))
+            ) {
+              $project = $folder
+              break
+            }
           }
 
-          if (!(Test-Path "$project/requirements.txt")) {
-            throw "requirements.txt not found."
+          if (!$project) {
+            Write-Host "Repository files:"
+            Get-ChildItem -Force
+            throw "Cannot find main.py, requirements.txt and Logo.png together."
           }
 
-          if (!(Test-Path "$project/Logo.png")) {
-            throw "Logo.png not found. Upload the company logo."
-          }
+          "PROJECT_DIR=$project" |
+            Out-File -FilePath $env:GITHUB_ENV -Append
 
-          "PROJECT_DIR=$project" | Out-File -FilePath $env:GITHUB_ENV -Append
-
-          Write-Host "Project folder: $project"
+          Write-Host "Project directory: $project"
           Get-ChildItem $project
 
       - name: Set up Python
@@ -56,7 +63,7 @@ jobs:
           python -m pip install -r "$env:PROJECT_DIR/requirements.txt"
           python -m pip install pyinstaller
 
-      - name: Build Windows EXE
+      - name: Build Windows executable
         shell: pwsh
         run: |
           pyinstaller `
@@ -67,15 +74,15 @@ jobs:
             "$env:PROJECT_DIR/main.py"
 
           if (!(Test-Path "dist/DevendraPDF.exe")) {
-            throw "EXE build failed."
+            throw "DevendraPDF.exe was not created."
           }
 
-      - name: Include company logo
+      - name: Copy company logo
         shell: pwsh
         run: |
           Copy-Item "$env:PROJECT_DIR/Logo.png" "dist/Logo.png"
 
-      - name: Upload downloadable application
+      - name: Upload Windows application
         uses: actions/upload-artifact@v4
         with:
           name: DevendraPDF-Windows-x64
